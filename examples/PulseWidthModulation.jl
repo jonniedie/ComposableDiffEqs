@@ -43,7 +43,7 @@ h(x, u, t) = x[1] + 3*x[2]
 sys_base = NLStateSpace(StateFunction(f!, 1), OutputFunction(h, 1, 1))
 sys1 = NLStateSpace(StateFunction(f1!, 1), OutputFunction(h1, 1, 1))
 sys2 = NLStateSpace(StateFunction(f2!, 1), OutputFunction(h2, 1, 1))
-sys_comp = sys1 * sys2
+sys_comp = sys2 * sys1
 
 # Pulse width modulation
 pwm(t, period, duty) = mod(t, period) ≤ duty*period ? 1 : 0
