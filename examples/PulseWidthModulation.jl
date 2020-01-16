@@ -36,11 +36,11 @@ function f!(dx, x, u, t)
     return nothing
 end
 
-h1(x, u, t) = x[1]
+h1(x, t) = x[1]
 h2(x, u, t) = u[1] + 3*x[1]
-h(x, u, t) = x[1] + 3*x[2]
+h(x, t) = x[1] + 3*x[2]
 
-sys_base = NLStateSpace(StateFunction(f!, 1), OutputFunction(h, 1, 1))
+sys_base = NLStateSpace(StateFunction(f!, 1), OutputFunction(h, 1))
 sys1 = NLStateSpace(StateFunction(f1!, 1), OutputFunction(h1, 1, 1))
 sys2 = NLStateSpace(StateFunction(f2!, 1), OutputFunction(h2, 1, 1))
 sys_comp = sys2 * sys1
@@ -50,10 +50,11 @@ pwm(t, period, duty) = mod(t, period) ≤ duty*period ? 1 : 0
 pwm(period, duty) = t -> pwm(t, period, duty)
 
 # Trigger times for pwm to be passed into the solver tstops keyword argument
+vzip(vect1, vect2) = vcat([vcat(v1, v2) for (v1, v2) in zip(vect1, vect2)]...)
 function pwm_triggers(stoptime, period, duty)
-    rise = collect(period:period:stoptime)
+    rise = period:period:stoptime
     fall = rise .+ duty*period
-    return vcat(rise, fall) |> sort!
+    return vzip(rise, fall)
 end
 
 x₀ = [0., 0., 0.]

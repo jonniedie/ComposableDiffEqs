@@ -1,85 +1,154 @@
-using ControlSystems
+include("helpers.jl")
+include("Blocks/Sources.jl")
+
+import ControlSystems
 
 # Alias to make extensions less verbose. Maybe I should import the functions?
 CS = ControlSystems
 
-# ------------------------------------ Sources ---------------------------------------------
-abstract type DiscreteSource end
-
-struct PulseTrain <: DiscreteSource
-    amplitude
-    period
-    duty
-end
-
-struct Step <: DiscreteSource
-    amplitude
-    steptime
-end
-
-struct ContinuousSource
-    func
-end
-
-Source = Union{DiscreteSource, ContinuousSource}
 
 
+# ---------------------------- Generalized state space--------------------------------------
+# Generalized state space form:
+#       ẋ = f(x, u, t)
+#       y = h(x, u, t)
+#
+#   where
+#       x: internal states variables
+#       u: input state variables
+#       y: output state variables
+#       t: simulation time
+#       f: state function
+#       h: output function
+# ------------------------------------------------------------------------------------------
+abstract type SSFunction end
 
-# ----------------------------- State-Space Functions---------------------------------------
-# ODEFunction wrappers that keep track of number of input, internal, and output variables.
-abstract type SSFunction <: Function end
-
-struct StateFunction <: SSFunction
+# State function (f from generalized state space form)
+struct StateFunction{Initialized} <: SSFunction
     func::Function
-    nu::Int
     init_cond
-    StateFunction(func, nu, init_cond=nothing) = new(func, nu, init_cond)
+
+    StateFunction(func, init_cond) = new{true}(func, init_cond)
+    StateFunction(func) = new{false}(func, nothing)
 end
 
-struct OutputFunction <: SSFunction
+# Output function (h from generalized state space form)
+struct OutputFunction{Feedthrough} <: SSFunction
     func::Function
-    nu::Int
-    ny::Int
+
+    function OutputFunction(func)
+        narg_vect = nargin(func)
+        nmethods = length(narg_vect)
+        nargs = narg_vect[1]
+
+        @assert(nmethods==1,
+            "Output function must have only 1 method, instead it has $nmethods"
+        )
+
+        if nargs==2
+            feedthrough = false
+        elseif nargs==3
+            feedthrough = true
+        else
+            error("Output function must have 2 or 3 arguments, instead it has $nargs")
+        end
+
+        return new{feedthrough}(func)
+    end
 end
+
+# # Feedthrough output functions are of form:
+# #   h(x, u, t)
+# struct FeedthroughOutputFunction <: AbstractOutputFunction
+#     func::Function
+#     nu::Int
+#     ny::Int
+# end
+#
+# # Output functions (non-feedthrough) are of form:
+# #   h(x, t)
+# struct OutputFunction <: AbstractOutputFunction
+#     func::Function
+#     ny::Int
+# end
 
 (f::SSFunction)(args...; kwargs...) = f.func(args...; kwargs...)
 
 
-function CS.state_space_validation(f::StateFunction, h::OutputFunction, Ts)
-    @assert(f.nu == h.nu,
-        "State and output functions must have same number of control variables"
-    )
-    @assert(Ts ≥ 0 || Ts == -1,
-        "Ts must be either a positive number, 0 (continuous system), or -1 (unspecified)"
-    )
-    return f.nu, h.ny
+# function CS.state_space_validation(f::Function, h::Function, Ts)
+#     f_narg_vect, h_narg_vect = (f, h) .|> nargin
+#
+#     @assert(length(f_narg_vect)==length(h_narg_vect)==1,
+#         "State and output functions must have only one method"
+#     )
+#     @assert(Ts ≥ 0 || Ts == -1,
+#         "Ts must be either a positive number, 0 (continuous system), or -1 (unspecified)"
+#     )
+#
+#     f_nargs, h_nargs = f_narg_vect[1], h_narg_vect[1]
+#
+#
+#     if h_nargs==2
+#         h_type = OutputFunction
+#     elseif h_nargs==3
+#         h_type = FeedthroughOutputFunction
+#     else
+#         error("Output function must have signature: h(x, u, t) or h(x, t)")
+#     end
+#
+#     return f.nx, f_nargs, h_nargs, h_type
+# end
+
+
+struct NLStateSpace{Initialized, Feedthrough}
+    f::StateFunction{Initialized}
+    h::OutputFunction{Feedthrough}
+    x
+    y
+    Ts
+    in
+    out
+end
+function NLStateSpace(f, h, Ts=-1, in=[], out=[])
+    f = StateFunction(f)
+    h = OutputFunction(h)
+    return NLStateSpace(f, h, Ts, in, out)
 end
 
-
-struct NLStateSpace
-    f::Function
-    h::Function
-    Ts #::Float64
-    nu::Int
-    ny::Int
-    NLStateSpace(f, h, Ts=-1) = new(f, h, Ts, CS.state_space_validation(f, h, Ts)...)
-end
-function (sys::NLStateSpace)(u)
-
-end
-
-# Extend ss method to create NLStateSpace type when functions are passed in
-CS.ss(f::Function, h::Function, args...; kwargs...) = NLStateSpace(f, h, args...; kwargs...)
-
-GeneralizedStateSpace = Union{CS.StateSpace, NLStateSpace}
-
-
-# ------------------------------- Simulation Model -----------------------------------------
-struct SimModel
-    source
-
-end
-
+# abstract type AbstractNLStateSpace end
+#
+# struct FeedthroughNLStateSpace <: AbstractNLStateSpace
+#     f::StateFunction
+#     h::FeedthroughOutputFunction
+#     Ts #::Float64
+#     in
+#     out
+# end
+#
+# struct NLStateSpace <: AbstractNLStateSpace
+#     f::StateFunction
+#     h::OutputFunction
+#     Ts #::Float64
+#     in
+#     out
+#     NLStateSpace(f, h, Ts=-1) = new(f, h, Ts, CS.state_space_validation(f, h, Ts)...)
+# end
+#
+#
+# function (sys::AbstractNLStateSpace)(u)
+#
+# end
+#
+# # Extend ss method to create NLStateSpace type when functions are passed in
+# function CS.ss(f::Function, h::Function, args..., kwargs...)
+#     return
+# end
+# CS.ss(f::Function, h::OutputFunction, args...; kwargs...) =
+#     NLStateSpace(f, h, args...; kwargs...)
+# CS.ss(f::Function, h::FeedthroughOutputFunction, args...; kwargs...) =
+#     FeedthroughNLStateSpace(f, h, args...; kwargs...)
+#
+# GeneralizedStateSpace = Union{CS.StateSpace, NLStateSpace}
 
 
 
@@ -89,43 +158,6 @@ initial_conditions(sys::NLStateSpace) = sys.f.init_cond
 
 CS.ninputs(sys::NLStateSpace) = sys.nu
 CS.noutputs(sys::NLStateSpace) = sys.ny
-
-# function Base.:+(sys1::NLStateSpace, sys2::NLStateSpace)
-#     @assert(size(sys1) == size(sys2), "Systems have different shapes")
-#     @assert(sys1.Ts == sys2.Ts, "Sampling time mismatch")
-#
-#     # f(x) = sys1.f(x[1:nstates(sys1)])
-# end
-
-# Note reverse order of sys1 and sys2 because of right-to-left operation
-function Base.:*(sys2::NLStateSpace, sys1::NLStateSpace)
-    # Check that input/output dimensions and sampling times are compatable
-    @assert(CS.ninputs(sys1) == CS.noutputs(sys2),
-        "sys1 must have same number of inputs as sys2 has outputs"
-    )
-    @assert(sys1.Ts == sys2.Ts, "Sampling time mismatch")
-
-    # Input/output dimensions
-    nu = sys1.nu
-    ny = sys2.ny
-
-    # Initial conditions
-    init = initial_conditions.([sys1, sys2])
-
-    # New state function
-    function f!(dx, x, u, t)
-        dx1, dx2, x1, x2 = @views dx[1], dx[2], x[1], x[2]
-        y = sys1.h(x1, u, t)
-        sys1.f(dx1, x1, u, t)
-        sys2.f(dx2, x2, y, t)
-        return nothing
-    end
-
-    # New output function
-    h(x, u, t) = sys2.h(x[2], sys1.h(x[1], u, t), t)
-
-    return NLStateSpace(StateFunction(f!, nu, init), OutputFunction(h, nu, ny), sys1.Ts)
-end
 
 # Indexing Functions
 Base.ndims(::NLStateSpace) = 2
