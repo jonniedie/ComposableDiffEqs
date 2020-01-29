@@ -21,7 +21,7 @@ end
 
 p = 0.0
 
-x0 = NamedViewVector((x=(x1=1.0, x2=2.0), y=3.0))
+x0 = NamedViewVector{Float64}((x=(x1=1.0, x2=2.0), y=3.0))
 
 prob = ODEProblem(de, x0, (0.0, 10.0), p)
-sol = solve(prob, Tsit5(), adaptive=false, dt=0.1)
+sol = solve(prob, Tsit5())

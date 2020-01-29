@@ -1,7 +1,7 @@
 include("NamedViewVector.jl")
 
 using DifferentialEquations
-using LinearAlgebra: normalize
+using LinearAlgebra: normalize, norm
 
 
 # -- Point mass equations of motion --------------------------------------------------------
@@ -19,8 +19,11 @@ G0 = 9.80665
 
 # Mass equation
 function mass!(dx, x, p, t)
-    dx = -p.F / p.ISP / G0
+    dx.mass = -norm(p.F) / p.ISP / G0
     return nothing
+end
+function mass(x, p, t)
+    return -norm(p.F) / p.ISP / G0
 end
 
 
@@ -29,7 +32,8 @@ function rocket!(dx, x, p, t)
     # F = p.F(t, x.body.vel)
     F = p.F
     EOM!(dx.body, x.body, (F=F, m=x.mass), t)
-    mass!(dx.mass, x.mass, (ISP=p.ISP, F=F), t)
+    mass!(dx, x, (ISP=p.ISP, F=F), t)
+    # dx.mass = mass(x, (ISP=p.ISP, F=F), t)
     return nothing
 end
 
@@ -77,5 +81,5 @@ p = (ISP = ISP, F = [100.0, 0.0, 0.0])
 
 
 # -- Run Simulation ------------------------------------------------------------------------
-prob = ODEProblem(rocket!, NamedViewVector(vehicle₀), tspan, p)
+prob = ODEProblem(rocket!, NamedViewVector{Float64}(vehicle₀), tspan, p)
 sol = solve(prob, Tsit5())
