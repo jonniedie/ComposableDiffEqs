@@ -7,7 +7,8 @@ struct MutableNamedTuple{K,T}
             if val isa NamedTuple
                 val = MutableNamedTuple(val)
             end
-            push!(data, key => [val])
+            type = val isa Function ? Function : typeof(val)
+            push!(data, key => type[val])
         end
         nt = (; data...)
         K,T = typeof(nt).parameters
