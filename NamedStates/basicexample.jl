@@ -7,10 +7,8 @@ include("NamedViewVector.jl")
 
 using DifferentialEquations
 using Plots
-using Interact
 
 theme(:juno)
-settheme!(:nativehtml)
 
 
 function lorenz!(du, u, (p, f), t)
