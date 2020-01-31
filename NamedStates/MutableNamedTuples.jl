@@ -18,12 +18,21 @@ end
 MutableNamedTuple(; kwargs...) = MutableNamedTuple((;kwargs...))
 
 Base.getproperty(mnt::MutableNamedTuple, key::Symbol) = getfield(mnt, :data)[key][1]
+
 Base.propertynames(mnt::MutableNamedTuple) = propertynames(getfield(mnt, :data))
-Base.setproperty!(mnt::MutableNamedTuple, key::Symbol, val) =
-    (getfield(mnt, :data)[key][1] = val)
+
+function Base.setproperty!(mnt::MutableNamedTuple, key::Symbol, val)
+    getfield(mnt, :data)[key][1] = val
+    # setindex!(getproperty(getfield(mnt, :data), key), val, 1)
+    return nothing
+end
 
 Base.getindex(mnt::MutableNamedTuple, key::Symbol) = getproperty(mnt, key)
-Base.setindex!(mnt::MutableNamedTuple, val, key::Symbol) = setproperty!(mnt, key, val)
+
+function Base.setindex!(mnt::MutableNamedTuple, val, key::Symbol)
+    getfield(mnt, :data)[key][1] = val
+    return nothing
+end
 
 function namedtuple(mnt::MutableNamedTuple)
     data = []

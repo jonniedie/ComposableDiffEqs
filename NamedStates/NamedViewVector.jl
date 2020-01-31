@@ -12,7 +12,7 @@ MutableStruct(keys...) = (args...) -> MutableNamedTuple((; zip(keys, args)...))
 
 struct NamedViewVector{T} <: AbstractVector{T}
     data::MutableNamedTuple
-    vector::Array{SubArray{T}, 1}
+    vector::Array{SubArray{T,0,Array{T,1},Tuple{Int64},true}, 1}
 end
 function NamedViewVector{T}(mnt::MutableNamedTuple) where {T}
     mnt = recursive_convert(T, mnt)
@@ -61,12 +61,14 @@ Base.getindex(nvv::NamedViewVector, i::Int) = getfield(nvv, :vector)[i][1][1]
 # Base.getindex(nvv::NamedViewVector, I::Vararg{Int,N}) where {N} = getfield(nvv, :vector)[I...]
 # Base.getindex(nvv::NamedViewVector, ::Colon) = getfield(nvv, :vector)[:]
 Base.getindex(nvv::NamedViewVector, kr::AbstractRange) = getindex.(getfield(nvv, :vector)[kr], 1)
-
 # Base.getindex(nvv::NamedViewVector, idx...) = getfield(nvv, :vector)[idx...]
 Base.getindex(nvv::NamedViewVector, key::Symbol) = getfield(nvv, :data)[key]
 
-Base.setindex!(nvv::NamedViewVector, v, i::Int) = (getfield(nvv, :vector)[i][1] = v)
-# Base.setindex!(nvv::NamedViewVector, v, I::Vararg{Int,N}) where {N} = (getfield(nvv, :vector)[I...] .= v)
+function Base.setindex!(nvv::NamedViewVector, v, i::Int)
+    getfield(nvv, :vector)[i][1] = v
+    return nothing
+end
+# # Base.setindex!(nvv::NamedViewVector, v, I::Vararg{Int,N}) where {N} = (getfield(nvv, :vector)[I...] .= v)
 function Base.setindex!(nvv::NamedViewVector, v, ::Colon)
     for i in eachindex(nvv)
         getfield(nvv, :vector)[i][1] = v
@@ -75,11 +77,14 @@ function Base.setindex!(nvv::NamedViewVector, v, ::Colon)
 end
 function Base.setindex!(nvv::NamedViewVector, v, kr::AbstractRange)
     for i in kr
-        getfield(nvv, :vector)[kr][1] = v
+        getfield(nvv, :vector)[i][1] = v
     end
     return nothing
 end
-Base.setindex!(nvv::NamedViewVector, value, key::Symbol) = (getfield(nvv, :vector)[key][1] = value)
+function Base.setindex!(nvv::NamedViewVector, v, key::Symbol)
+    getfield(nvv, :data)[key] = v
+    return nothing
+end
 
 # Base.copyto!(nvv::NamedViewVector, src::AbstractArray) = (nvv[1:length(src)] = src)
 # Base.copyto!(nvv::NamedViewVector, src::Base.Broadcast.Broadcasted) = (nvv[1:length(src)] = src)
@@ -91,7 +96,11 @@ Base.setindex!(nvv::NamedViewVector, value, key::Symbol) = (getfield(nvv, :vecto
 
 Base.getproperty(nvv::NamedViewVector, key::Symbol) = getfield(nvv, :data)[key]
 
-Base.setproperty!(nvv::NamedViewVector, key::Symbol, val) = (getfield(nvv, :data)[key] = val)
+function Base.setproperty!(nvv::NamedViewVector, key::Symbol, val)
+    setproperty!(getfield(nvv, :data), key, val)
+    # setindex!(getfield(getfield(getfield(nvv, :data), :data), key), val, 1)
+    return nothing
+end
 
 Base.propertynames(nvv::NamedViewVector) = propertynames(getfield(nvv, :data))
 
