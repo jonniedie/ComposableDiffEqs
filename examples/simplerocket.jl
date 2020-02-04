@@ -4,7 +4,6 @@ using DifferentialEquations
 using LinearAlgebra: normalize, norm
 using Plots
 
-theme(:juno)
 plotly()
 
 # -- Constants -----------------------------------------------------------------------------
@@ -15,23 +14,21 @@ const G0 = 9.80665
 # -- Component equations -------------------------------------------------------------------
 # Equations of motion
 function EOM!(dx, x, p, t)
-    dx.pos .= x.vel
-    dx.vel .= p.F / p.mass
+    @. dx.pos = x.vel
+    @. dx.vel = p.F / p.mass
     return nothing
 end
 
 # Propellent mass equation
 propellent(x, p, t) = -p.F / p.ISP / G0
 
-# Velocity-aligned thrust (these aren't differential equations, we just need dx for
-#   acceleration limiting)
-thrust_on(vel, p) = p.F * normalize(vel)
-thrust_off(vel, p) = zero(vel)
-function thrust_vel_limited(vel, p)
+# Velocity-aligned thrust
+thrust_full(vel, ctrl) = ctrl.thrust_lim * normalize(vel)
+thrust_off(vel, ctrl) = zero(vel)
+function thrust_vel_limited(vel, ctrl)
     vel_mag = norm(vel)
-    err = p.vel_setpoint - vel_mag
-    F = p.kₚ * err
-    return clamp(F, 0, p.max_F) / vel_mag * vel
+    F = ctrl.k_p * (ctrl.vel_setpoint - vel_mag)
+    return clamp(F, 0, ctrl.thrust_lim) / vel_mag * vel
 end
 
 
@@ -43,9 +40,14 @@ function rocket!(dx, x, p, t)
     F_mag = norm(F)
     F[end] -= G0 # Apply gravity
 
-    # Run equations!
-    EOM!(dx.body, x.body, (F=F, mass=p.dry_mass+x.prop_mass), t)
-    dx.prop_mass = propellent(x.prop_mass, (ISP=p.ISP, F=F_mag), t)
+    # Run equations of motion!
+    p_EOM = (F = F, mass = p.vehicle.dry_mass + x.prop_mass)
+    EOM!(dx.body,x.body, p_EOM, t)
+
+    # Run propellent equation
+    p_prop = (ISP = p.vehicle.ISP, F = F_mag),
+    dx.prop_mass = propellent(x.prop_mass, p_prop, t)
+
     return nothing
 end
 
@@ -67,44 +69,39 @@ cb = CallbackSet(ground_cb, prop_cb)
 
 
 # -- Parameters ----------------------------------------------------------------------------
-# Specific impulse and vehicle dry mass
-ISP = 150.0
-dry_mass = 2.0
+# Vehicle properties
+p_vehicle = (
+    dry_mass = 2.0,
+    ISP = 150.0,
+)
 
-# Open-loop thrust parameters
-thrust_function = thrust_vel_limited
-max_F = 100.0
-vel_setpoint = 1000.0
-kₚ = 1.0
+# Throttle control parameters
+p_control = (
+    thrust = thrust_vel_limited,
+    thrust_lim = 100.0,
+    vel_setpoint = 1000.0,
+    k_p = 1.0,
+)
 
 # Parameters
 p = (
-    ISP = ISP,
-    max_F = max_F,
-    dry_mass = dry_mass,
-    thrust = thrust_function,
-    vel_setpoint = vel_setpoint,
-    kₚ = kₚ
-    )
+    vehicle = p_vehicle,
+    control = p_control,
+)
 
 
 # -- Initial conditions --------------------------------------------------------------------
 # Vehicle body initial conditions
-pos₀ = [0.0, 0.0, 0.0]
-vel₀ = [0.01, 0.02, 1.0] # Cannot be all zero because F wouldn't know where to point
 body₀ = (
-    pos = pos₀,
-    vel = vel₀,
-    )
-
-# Mass initial conditions
-prop_mass₀ = 7.0
+    pos = [0.0, 0.0, 0.0],
+    vel = [0.01, 0.02, 1.0],
+)
 
 # Full state initial conditions
 vehicle₀ = (
     body = body₀,
-    prop_mass = prop_mass₀,
-    )
+    prop_mass = 7.0,
+)
 
 
 # -- Simulation setup ----------------------------------------------------------------------
