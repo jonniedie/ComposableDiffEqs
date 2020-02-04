@@ -10,33 +10,55 @@ import RecursiveArrayTools:
 Struct(keys...) = (args...) -> (; zip(keys, args)...)
 MutableStruct(keys...) = (args...) -> MutableNamedTuple((; zip(keys, args)...))
 
+View{T} = SubArray{T,0,Array{T,1},Tuple{Int64},true}
+
 struct NamedViewVector{T} <: AbstractVector{T}
     data::MutableNamedTuple
-    vector::Array{SubArray{T,0,Array{T,1},Tuple{Int64},true}, 1}
+    vector::Array{View{T}, 1}
 end
 function NamedViewVector{T}(mnt::MutableNamedTuple) where {T}
     mnt = recursive_convert(T, mnt)
-    return NamedViewVector{T}(mnt, attached_vect(mnt))
+    return NamedViewVector{T}(mnt, attached_vect(mnt, T))
 end
 NamedViewVector{T}(nt::NamedTuple) where {T} = NamedViewVector{T}(MutableNamedTuple(nt))
 
-function attached_vect(mnt::MutableNamedTuple)
-    vector = []
+# function attached_vect(mnt::MutableNamedTuple)
+#     vector = []
+#     for (key, val) in zip(keys(mnt), values(mnt))
+#         if val[1] isa Number
+#             push!(vector, view(val, 1))
+#         elseif val[1] isa AbstractVector
+#             for i in eachindex(val[1])
+#                 push!(vector, view(val[1], i))
+#             end
+#         elseif val[1] isa MutableNamedTuple
+#             push!(vector, attached_vect(val[1])...)
+#         end
+#     end
+#     return vector
+# end
+
+# TODO: Make these all parameterized by ::Type{T}
+# attached_vect(mnt, ::Type{T}) where {T} = recursive_convert(T, mnt) |> attached_vect
+function attached_vect(mnt::MutableNamedTuple, ::Type{T}) where {T}
+    mnt = recursive_convert(T, mnt)
+    vector = View{T}[]
     for (key, val) in zip(keys(mnt), values(mnt))
-        if val[1] isa Number
-            push!(vector, view(val, 1))
-        elseif val[1] isa AbstractVector
-            for i in eachindex(val[1])
-                push!(vector, view(val[1], i))
-            end
-        elseif val[1] isa MutableNamedTuple
-            push!(vector, attached_vect(val[1])...)
-        end
+        att_vect = attached_vect(val, T)
+        push!(vector, att_vect...)
     end
     return vector
 end
-attached_vect(mnt::MutableNamedTuple, ::Type{T}) where {T} =
-    recursive_convert(T, mnt) |> attached_vect
+function attached_vect(val::AbstractVector{<:AbstractVector{<:T}}, ::Type{T}) where {T}
+    vector = View{T}[]
+    for i in eachindex(val[1])
+        push!(vector, view(val[1], i))
+    end
+    return vector
+end
+attached_vect(val::AbstractVector{<:MutableNamedTuple}, ::Type{T}) where {T} =
+    View{T}[attached_vect(val[1], T)...]
+attached_vect(val, ::Type{T}) where {T} = View{T}[view(val, 1)]
 
 
 recursive_convert(::Type{T}, num::Number) where {T} = T(num)
@@ -82,7 +104,8 @@ function Base.setindex!(nvv::NamedViewVector, v, kr::AbstractRange)
     return nothing
 end
 function Base.setindex!(nvv::NamedViewVector, v, key::Symbol)
-    getfield(nvv, :data)[key] = v
+    setproperty!(nvv, key, v)
+    # getfield(nvv, :data)[key] = v
     return nothing
 end
 

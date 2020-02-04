@@ -8,6 +8,7 @@ struct MutableNamedTuple{K,T}
                 val = MutableNamedTuple(val)
             end
             type = val isa Function ? Function : typeof(val)
+            # type = typeof(val)
             push!(data, key => type[val])
         end
         nt = (; data...)
@@ -22,15 +23,23 @@ Base.getproperty(mnt::MutableNamedTuple, key::Symbol) = getfield(mnt, :data)[key
 Base.propertynames(mnt::MutableNamedTuple) = propertynames(getfield(mnt, :data))
 
 function Base.setproperty!(mnt::MutableNamedTuple, key::Symbol, val)
-    getfield(mnt, :data)[key][1] = val
-    # setindex!(getproperty(getfield(mnt, :data), key), val, 1)
+    d = getfield(mnt, :data)
+    prop = getproperty(d, key)
+    _setvalue!(prop, val)
+    return nothing
+end
+
+# Need this function barrier for type stability
+function _setvalue!(arr, val)
+    arr[1] = val
     return nothing
 end
 
 Base.getindex(mnt::MutableNamedTuple, key::Symbol) = getproperty(mnt, key)
 
 function Base.setindex!(mnt::MutableNamedTuple, val, key::Symbol)
-    getfield(mnt, :data)[key][1] = val
+    set_property!(mnt, key, val)
+    # getfield(mnt, :data)[key][1] = val
     return nothing
 end
 

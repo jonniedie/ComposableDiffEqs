@@ -1,5 +1,5 @@
 using DifferentialEquations
-using CoolDicts
+# using CoolDicts
 
 
 struct NamedViewVector{T} <: AbstractVector{T}

@@ -3,12 +3,12 @@ Example taken from:
 https://github.com/JuliaDiffEq/ModelingToolkit.jl/issues/36#issuecomment-536221300
 """
 
-include("NamedViewVector.jl")
+include("NewNamedViewVector.jl")
 
 using DifferentialEquations
 using Plots
 
-theme(:juno)
+# theme(:juno)
 
 
 function lorenz!(du, u, (p, f), t)
